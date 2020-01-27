@@ -1,0 +1,215 @@
+---
+title: "We Try this again"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    source_code: embed
+runtime: shiny
+---
+
+
+```{r global, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(readxl)
+library(tidyverse)
+library(plotly)
+library(ggmap)
+
+
+###
+
+global <- read.csv("global.csv")
+
+country_coor=read_excel("country coord.xlsx")
+
+```
+
+Dash {data-icon="fa-globe"}
+=============================
+Row {data-width=150}
+--------------------------------------
+### Total New Hires
+
+```{r, echo=FALSE}
+newhires = global %>% filter(`Type.of.movement`=="Entry") %>% nrow()
+
+renderValueBox({ valueBox(value = newhires,icon = "fa-user-plus",caption = "New Hires",color = "green")})
+
+
+```
+
+
+### Total exits
+```{r}
+newexits <- global  %>%  filter(`Type.of.movement` == "Exit") %>% nrow()
+
+renderValueBox({valueBox(value = newexits, icon = "fa-user-times", caption = "Exits", color = "orange")
+})
+
+```
+
+### Chart C
+
+```{r}
+### Net Change
+newhires=global %>% filter(`Type.of.movement`=="Entry") %>% nrow()
+
+
+newexits <- global  %>%  filter(`Type.of.movement` == "Exit") %>% nrow()
+
+
+netchange <- newhires - newexits
+
+renderValueBox({
+if (netchange > 0){
+  valueBox(value = netchange, icon = "fa-arrow-up", caption = "Net change", color = "green")
+} else {
+  valueBox(value = netchange, icon = "fa-arrow-down", caption = "Net change", color = "orange")
+}
+})
+```
+
+Row
+----------------------------------
+
+### Movement by Month
+
+```{r}
+h1= global %>% group_by(Month,`Type.of.movement`) %>% 
+  summarise(count=n())
+
+
+renderPlot({ 
+  ggplot(h1, aes(Month, count, group = `Type.of.movement`, col = `Type.of.movement`)) +
+  geom_line(size = 0.9) + geom_point() + labs(title = "Movement by Month")
+})
+
+```
+
+
+
+### Movement by Country
+
+```{r}
+#Count by month, entry/exit and country
+h2=global %>% 
+  group_by(Month,`Type.of.movement`,Country) %>% 
+  summarise(count=n())
+#Add long/lat info based on country name from countr_coor
+h2=left_join(h2,country_coor[,2:4],by=c("Country"="name"))
+#h2 is the table where I want the info
+#country_coor[,2:4] selects only long, lat and name columns
+# so that I can only add the long and lat cols to h2 after the join
+#by=c() identifies the keys in both dataframes
+renderPlotly({ plot_geo(h2,locationmode="world") %>% 
+  add_markers(x=h2$longitude,
+              y=h2$latitude,
+              size=h2$count,
+              color=h2$`Type.of.movement`,
+              hoverinfo="text",
+              hovertext=paste(h2$`Type.of.movement`,": ",h2$count)) %>% 
+  layout()
+})
+
+```
+
+
+New hires {data-icon="fa-user-plus"}
+==================
+Row{data-height=250}
+--------
+
+### Avg New Hires YTD
+```{r}
+newhire_bymonth = global %>% 
+  filter(`Type.of.movement`=="Entry") %>% 
+  group_by(Month) %>% 
+  summarise(count=n())
+avgnewhire=round(mean(newhire_bymonth$count),2)
+  
+renderValueBox({ valueBox(avgnewhire,icon = "fa-user-plus",caption = "Average monthly new hires",color = "green")
+})
+```
+
+
+
+### New hire split by Employment
+```{r}
+h5=global %>% 
+  filter(`Type.of.movement`=="Entry") %>% 
+  group_by(`Employment.type`) %>% 
+  summarise(count=n())
+p5=plot_ly(h5) %>% 
+  add_pie(labels=h5$`Employment.typee`,values=h5$count,hole=0.6)
+
+renderPlotly({ p5
+})
+```
+
+
+
+### New hire split by Work.Authorisation
+```{r}
+h6=global %>% 
+  filter(`Type.of.movement`=="Entry") %>% 
+  group_by(`Work.Authorisation`) %>% 
+  summarise(count=n())
+
+renderPlotly({ plot_ly(h6) %>% 
+  add_pie(labels=h6$`Work.Authorisation`,values=h6$count,hole=0.6)
+})
+
+```
+
+
+Row
+----------
+
+### New hires by Country
+```{r}
+#Summarise and group by Country
+h3=global %>% 
+  filter(`Type.of.movement`=="Entry") %>% 
+  group_by(Month,Country) %>% 
+  summarise(count=n())
+#Use spread to make the table ready for plots
+h3=spread(h3,key = Country,value = count)
+#Bar chart by country
+p3=plot_ly(h3,
+           x=h3$Month,
+           hoverinfo="text") %>% 
+  add_bars(y=h3$Argentina,
+           name="Argentina",
+           hovertext=paste(h3$Argentina)) %>% 
+  add_bars(y=h3$Australia,
+           name="Australia",
+           hovertext=paste("Australia: ",h3$Australia)) %>% 
+  add_bars(y=h3$Brazil,
+           name="Brazil",
+           hovertext=paste("Brazil: ",h3$Brazil)) %>%
+  add_bars(y=h3$Canada,
+           name="Canada",
+           hovertext=paste("Canada: ",h3$Canada)) %>%
+  add_bars(y=h3$India,
+           name="India",
+           hovertext=paste("India: ",h3$India)) %>%
+  add_bars(y=h3$Romania,
+           name="Romania",
+           hovertext=paste("Romania: ",h3$Romania)) %>%
+  add_bars(y=h3$USA,
+           name="USA",
+           hovertext=paste("USA",h3$USA))
+  
+  
+renderPlotly({p3})
+```
+
+
+```{r, echo=FALSE}
+library(rsconnect)
+rsconnect::setAccountInfo(name='simmie', token='7ED35FF81F7109143A15AAB0A50981C7', secret='eQ0QsbPmXLcJbfPpyZ2p4VSEpJFySF5ziP2R2LHv')
+rsconnect::deployApp(appName = "new_h")
+```
+
